@@ -5,7 +5,8 @@ const bcrypt = require('bcryptjs');
 const getPendingVerifications = async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
-      SELECT u.user_id, u.firstname, u.lastname, u.gender, u.age, u.contact_number, u.email, u.account_status, u.created_at,
+      SELECT u.user_id, u.customer_no, u.firstname, u.middlename, u.lastname,
+             u.gender, u.age, u.contact_number, u.email, u.account_status, u.created_at,
              s.firstname AS staff_firstname, s.lastname AS staff_lastname
       FROM users u
       LEFT JOIN users s ON u.created_by = s.user_id
@@ -18,6 +19,22 @@ const getPendingVerifications = async (req, res, next) => {
   }
 };
 
+// Helper: generate a secure random password
+const generatePassword = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const digits = '0123456789';
+  // Format: Cms@XXXXXX (3 uppercase + 3 lowercase + @ + 6 digits)
+  let pass = 'Cms@';
+  for (let i = 0; i < 6; i++) {
+    pass += digits[Math.floor(Math.random() * digits.length)];
+  }
+  // Append 2 random alphanumeric chars for extra entropy
+  for (let i = 0; i < 2; i++) {
+    pass += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return pass;
+};
+
 // Admin approves or rejects customer account
 const verifyCustomerAccount = async (req, res, next) => {
   try {
@@ -28,12 +45,25 @@ const verifyCustomerAccount = async (req, res, next) => {
       return res.status(400).json({ message: 'User ID and valid action (approved/rejected) are required.' });
     }
 
+    let generatedPassword = null;
+    let passwordHash = '';
+
+    if (action === 'approved') {
+      generatedPassword = generatePassword();
+      passwordHash = await bcrypt.hash(generatedPassword, 10);
+    }
+
     await pool.query(
-      'CALL sp_verify_customer_account(?, ?, ?, ?)',
-      [user_id, adminId, action, remarks || '']
+      'CALL sp_verify_customer_account(?, ?, ?, ?, ?)',
+      [user_id, adminId, action, remarks || '', passwordHash]
     );
 
-    res.json({ message: `Customer account ${action} successfully.` });
+    const response = { message: `Customer account ${action} successfully.` };
+    if (action === 'approved' && generatedPassword) {
+      response.generated_password = generatedPassword;
+    }
+
+    res.json(response);
   } catch (error) {
     next(error);
   }
@@ -65,7 +95,7 @@ const getAdminSummary = async (req, res, next) => {
 const getAllStaff = async (req, res, next) => {
   try {
     const [staffList] = await pool.query(
-      'SELECT user_id, firstname, lastname, gender, age, contact_number, email, role, account_status, created_at FROM users WHERE role = "staff" ORDER BY created_at DESC'
+      'SELECT user_id, firstname, middlename, lastname, gender, age, contact_number, email, role, account_status, created_at FROM users WHERE role = "staff" ORDER BY created_at DESC'
     );
     res.json(staffList);
   } catch (error) {
@@ -75,12 +105,13 @@ const getAllStaff = async (req, res, next) => {
 
 const createUser = async (req, res, next) => {
   try {
-    const { firstname, lastname, gender, age, contact_number, email, password, role } = req.body;
-    if (!firstname || !lastname || !gender || !age || !contact_number || !email || !password) {
-      return res.status(400).json({ message: 'All user fields are required.' });
-    }
-
+    const { firstname, middlename, lastname, gender, age, contact_number, email, password, role } = req.body;
     const userRole = ['staff', 'customer'].includes(role) ? role : 'staff';
+
+    // Password is only required when manually creating staff accounts
+    if (!firstname || !lastname || !gender || age === undefined || age === null || age === '' || !contact_number || !email || (userRole === 'staff' && (!password || password.trim() === ''))) {
+      return res.status(400).json({ message: 'All required user fields must be filled.' });
+    }
     const status = userRole === 'customer' ? 'verified' : 'active';
 
     const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [email]);
@@ -89,10 +120,21 @@ const createUser = async (req, res, next) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    await pool.query(
-      'INSERT INTO users (firstname, lastname, gender, age, contact_number, email, password, role, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [firstname, lastname, gender, parseInt(age), contact_number, email, passwordHash, userRole, status]
-    );
+
+    if (userRole === 'customer') {
+      // Use SP for customers so customer_no is auto-generated
+      await pool.query(
+        'CALL sp_create_customer_account(?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [firstname, lastname, middlename || null, gender, parseInt(age), contact_number, email, passwordHash, req.user.user_id]
+      );
+      // Staff-created customers skip pending — set directly to verified
+      await pool.query('UPDATE users SET account_status = ? WHERE email = ?', ['verified', email]);
+    } else {
+      await pool.query(
+        'INSERT INTO users (firstname, middlename, lastname, gender, age, contact_number, email, password, role, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [firstname, middlename || null, lastname, gender, parseInt(age), contact_number, email, passwordHash, userRole, status]
+      );
+    }
 
     res.status(201).json({ message: `${userRole === 'staff' ? 'Staff' : 'Customer'} account created successfully.` });
   } catch (error) {
@@ -120,7 +162,7 @@ const toggleUserStatus = async (req, res, next) => {
 const getAllUsers = async (req, res, next) => {
   try {
     const [userList] = await pool.query(
-      'SELECT user_id, firstname, lastname, gender, age, contact_number, email, role, account_status, created_at FROM users WHERE role != "admin" ORDER BY created_at DESC'
+      'SELECT user_id, customer_no, firstname, middlename, lastname, gender, age, contact_number, email, role, account_status, created_at FROM users WHERE role != "admin" ORDER BY created_at DESC'
     );
     res.json(userList);
   } catch (error) {

@@ -93,11 +93,11 @@ const createService = async (req, res, next) => {
 const updateService = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { category_id, service_name, description, base_price, unit, is_active } = req.body;
+    const { category_id, service_name, description, base_price, unit, image_url, is_active } = req.body;
 
     await pool.query(
-      'UPDATE services SET category_id = ?, service_name = ?, description = ?, base_price = ?, unit = ?, is_active = ? WHERE service_id = ?',
-      [category_id, service_name, description, base_price, unit, is_active ? 1 : 0, id]
+      'UPDATE services SET category_id = ?, service_name = ?, description = ?, base_price = ?, unit = ?, image_url = ?, is_active = ? WHERE service_id = ?',
+      [category_id, service_name, description, base_price, unit, image_url || '', is_active ? 1 : 0, id]
     );
 
     res.json({ message: 'Service updated successfully.' });

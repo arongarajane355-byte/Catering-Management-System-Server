@@ -41,7 +41,9 @@ async function initDb() {
     // Create tables one by one
     await conn.query(`CREATE TABLE IF NOT EXISTS users (
       user_id         INT AUTO_INCREMENT PRIMARY KEY,
+      customer_no     VARCHAR(20) NULL UNIQUE,
       firstname       VARCHAR(50) NOT NULL,
+      middlename      VARCHAR(50) NULL,
       lastname        VARCHAR(50) NOT NULL,
       gender          ENUM('Male','Female','Other') NOT NULL,
       age             INT NOT NULL,
@@ -54,6 +56,14 @@ async function initDb() {
       created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`);
+
+    // Ensure middlename and customer_no columns exist if users table already existed
+    try {
+      await conn.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS middlename VARCHAR(50) NULL AFTER firstname`);
+    } catch (e) {}
+    try {
+      await conn.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_no VARCHAR(20) NULL UNIQUE AFTER user_id`);
+    } catch (e) {}
 
     await conn.query(`CREATE TABLE IF NOT EXISTS verification_logs (
       log_id        INT AUTO_INCREMENT PRIMARY KEY,
@@ -175,17 +185,59 @@ BEGIN
 SELECT c.category_id, c.category_name, c.description AS category_description, s.service_id, s.service_name, s.description AS service_description, s.base_price, s.unit, s.image_url FROM service_categories c JOIN services s ON s.category_id = c.category_id WHERE c.is_active = TRUE AND s.is_active = TRUE ORDER BY c.category_id, s.service_name;
 END`,
 
-      `CREATE PROCEDURE sp_create_customer_account(IN p_firstname VARCHAR(50), IN p_lastname VARCHAR(50), IN p_gender VARCHAR(10), IN p_age INT, IN p_contact_number VARCHAR(20), IN p_email VARCHAR(100), IN p_password_hash VARCHAR(255), IN p_staff_id INT)
+      `CREATE PROCEDURE sp_create_customer_account(
+  IN p_firstname VARCHAR(50),
+  IN p_lastname VARCHAR(50),
+  IN p_middlename VARCHAR(50),
+  IN p_gender VARCHAR(10),
+  IN p_age INT,
+  IN p_contact_number VARCHAR(20),
+  IN p_email VARCHAR(100),
+  IN p_password_hash VARCHAR(255),
+  IN p_staff_id INT,
+  IN p_customer_no VARCHAR(20)
+)
 BEGIN
-INSERT INTO users (firstname, lastname, gender, age, contact_number, email, password, role, account_status, created_by) VALUES (p_firstname, p_lastname, p_gender, p_age, p_contact_number, p_email, p_password_hash, 'customer', 'pending', p_staff_id);
-INSERT INTO notifications (user_id, message) SELECT user_id, CONCAT('New customer account "', p_firstname, ' ', p_lastname, '" awaiting verification.') FROM users WHERE role = 'admin';
-SELECT LAST_INSERT_ID() AS new_user_id;
+  DECLARE new_id INT;
+  DECLARE v_cust_no VARCHAR(20);
+
+  IF p_customer_no IS NOT NULL AND p_customer_no != '' THEN
+    SET v_cust_no = p_customer_no;
+  ELSE
+    SET v_cust_no = NULL;
+  END IF;
+
+  INSERT INTO users (customer_no, firstname, middlename, lastname, gender, age, contact_number, email, password, role, account_status, created_by)
+  VALUES (v_cust_no, p_firstname, p_middlename, p_lastname, p_gender, p_age, p_contact_number, p_email, p_password_hash, 'customer', 'pending', p_staff_id);
+
+  SET new_id = LAST_INSERT_ID();
+
+  IF v_cust_no IS NULL THEN
+    SET v_cust_no = CONCAT('CUST-', YEAR(NOW()), '-', LPAD(new_id, 4, '0'));
+    UPDATE users SET customer_no = v_cust_no WHERE user_id = new_id;
+  END IF;
+
+  INSERT INTO notifications (user_id, message)
+    SELECT user_id, CONCAT('New customer account "', p_firstname, ' ', p_lastname, '" awaiting verification.')
+    FROM users WHERE role = 'admin';
+
+  SELECT new_id AS new_user_id, v_cust_no AS customer_no;
 END`,
 
-      `CREATE PROCEDURE sp_verify_customer_account(IN p_user_id INT, IN p_admin_id INT, IN p_action VARCHAR(10), IN p_remarks VARCHAR(255))
+      `CREATE PROCEDURE sp_verify_customer_account(
+  IN p_user_id INT,
+  IN p_admin_id INT,
+  IN p_action VARCHAR(10),
+  IN p_remarks VARCHAR(255),
+  IN p_new_password_hash VARCHAR(255)
+)
 BEGIN
-UPDATE users SET account_status = IF(p_action = 'approved', 'verified', 'rejected') WHERE user_id = p_user_id AND role = 'customer';
-INSERT INTO verification_logs (user_id, reviewed_by, action, remarks) VALUES (p_user_id, p_admin_id, p_action, p_remarks);
+  IF p_action = 'approved' AND p_new_password_hash IS NOT NULL AND p_new_password_hash != '' THEN
+    UPDATE users SET account_status = 'verified', password = p_new_password_hash WHERE user_id = p_user_id AND role = 'customer';
+  ELSE
+    UPDATE users SET account_status = IF(p_action = 'approved', 'verified', 'rejected') WHERE user_id = p_user_id AND role = 'customer';
+  END IF;
+  INSERT INTO verification_logs (user_id, reviewed_by, action, remarks) VALUES (p_user_id, p_admin_id, p_action, p_remarks);
 END`,
 
       `CREATE PROCEDURE sp_create_booking(IN p_customer_id INT, IN p_event_type VARCHAR(100), IN p_event_date DATE, IN p_venue_address VARCHAR(255), IN p_guest_count INT)
@@ -239,26 +291,51 @@ END`
         ('Dessert & Beverage Packages', 'Add-on packages to complement the main meal.'),
         ('Equipment & Utensil Rental', 'Provision of necessary dining and serving equipment.');
 
-        INSERT INTO services (category_id, service_name, description, base_price, unit) VALUES
-        (1, 'Wedding Catering Package', 'Full catering service for weddings (Kasal).', 25000.00, 'package'),
-        (1, 'Birthday Catering Package', 'Catering package for birthday celebrations.', 12000.00, 'package'),
-        (1, 'Baptismal Catering Package', 'Catering package for baptismal events.', 10000.00, 'package'),
-        (1, 'Family Reunion Package', 'Catering package for family reunions.', 15000.00, 'package'),
-        (2, 'Buffet Station Setup', 'Professional buffet station setup at the venue.', 5000.00, 'package'),
-        (2, 'Chafing Dish Provision', 'Rental and setup of chafing dishes.', 150.00, 'unit'),
-        (2, 'Serving Crew (per head)', 'Optional professional serving staff.', 800.00, 'per head'),
-        (3, 'Custom Cake', 'Personalized custom cake for the event.', 2500.00, 'unit'),
-        (3, 'Pastry Platter', 'Assorted pastry platter.', 1800.00, 'platter'),
-        (3, 'Drink Station (Juice/Coffee/Tea)', 'Beverage station for guests.', 3500.00, 'package'),
-        (3, 'Dessert Bar', 'Assorted dessert bar setup.', 4500.00, 'package'),
-        (4, 'Table Rental', 'Rental of event tables.', 100.00, 'unit'),
-        (4, 'Chair Rental', 'Rental of event chairs.', 30.00, 'unit'),
-        (4, 'Tablecloth Rental', 'Rental of tablecloths.', 50.00, 'unit'),
-        (4, 'Plates & Glasses Set', 'Rental of plates and glasses per set.', 20.00, 'set'),
-        (4, 'Cutlery Set', 'Rental of cutlery per set.', 15.00, 'set'),
-        (4, 'Serving Tray Rental', 'Rental of serving trays.', 40.00, 'unit');
+        INSERT INTO services (category_id, service_name, description, base_price, unit, image_url) VALUES
+        (1, 'Wedding Catering Package', 'Full catering service for weddings (Kasal).', 25000.00, 'package', 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=600&q=80'),
+        (1, 'Birthday Catering Package', 'Catering package for birthday celebrations.', 12000.00, 'package', 'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?auto=format&fit=crop&w=600&q=80'),
+        (1, 'Baptismal Catering Package', 'Catering package for baptismal events.', 10000.00, 'package', 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=600&q=80'),
+        (1, 'Family Reunion Package', 'Catering package for family reunions.', 15000.00, 'package', 'https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&q=80'),
+        (2, 'Buffet Station Setup', 'Professional buffet station setup at the venue.', 5000.00, 'package', 'https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&q=80'),
+        (2, 'Chafing Dish Provision', 'Rental and setup of chafing dishes.', 150.00, 'unit', 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80'),
+        (2, 'Serving Crew (per head)', 'Optional professional serving staff.', 800.00, 'per head', 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=600&q=80'),
+        (3, 'Custom Cake', 'Personalized custom cake for the event.', 2500.00, 'unit', 'https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=600&q=80'),
+        (3, 'Pastry Platter', 'Assorted pastry platter.', 1800.00, 'platter', 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80'),
+        (3, 'Drink Station (Juice/Coffee/Tea)', 'Beverage station for guests.', 3500.00, 'package', 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80'),
+        (3, 'Dessert Bar', 'Assorted dessert bar setup.', 4500.00, 'package', 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=600&q=80'),
+        (4, 'Table Rental', 'Rental of event tables.', 100.00, 'unit', 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=600&q=80'),
+        (4, 'Chair Rental', 'Rental of event chairs.', 30.00, 'unit', 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=600&q=80'),
+        (4, 'Tablecloth Rental', 'Rental of tablecloths.', 50.00, 'unit', 'https://images.unsplash.com/photo-1532712938310-34cb3982ef74?auto=format&fit=crop&w=600&q=80'),
+        (4, 'Plates & Glasses Set', 'Rental of plates and glasses per set.', 20.00, 'set', 'https://images.unsplash.com/photo-1615865417236-d67f5ed658e6?auto=format&fit=crop&w=600&q=80'),
+        (4, 'Cutlery Set', 'Rental of cutlery per set.', 15.00, 'set', 'https://images.unsplash.com/photo-1584345604476-8ec5e12e42dd?auto=format&fit=crop&w=600&q=80'),
+        (4, 'Serving Tray Rental', 'Rental of serving trays.', 40.00, 'unit', 'https://images.unsplash.com/photo-1581349485608-9469926a8e5e?auto=format&fit=crop&w=600&q=80');
       `);
     }
+
+    // Auto-update missing image_url values for existing services
+    await conn.query(`
+      UPDATE services SET image_url = CASE
+        WHEN service_name LIKE '%Wedding%' THEN 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Birthday%' THEN 'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Baptismal%' THEN 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Family%' OR service_name LIKE '%Reunion%' THEN 'https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Buffet%' THEN 'https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Chafing%' THEN 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Serving Crew%' OR service_name LIKE '%Crew%' THEN 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Cake%' THEN 'https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Pastry%' THEN 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Drink%' OR service_name LIKE '%Juice%' THEN 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Dessert%' THEN 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Table%' AND service_name NOT LIKE '%Tablecloth%' THEN 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Chair%' THEN 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Tablecloth%' THEN 'https://images.unsplash.com/photo-1532712938310-34cb3982ef74?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Plates%' OR service_name LIKE '%Glasses%' THEN 'https://images.unsplash.com/photo-1615865417236-d67f5ed658e6?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Cutlery%' THEN 'https://images.unsplash.com/photo-1584345604476-8ec5e12e42dd?auto=format&fit=crop&w=600&q=80'
+        WHEN service_name LIKE '%Tray%' THEN 'https://images.unsplash.com/photo-1581349485608-9469926a8e5e?auto=format&fit=crop&w=600&q=80'
+        ELSE 'https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&q=80'
+      END
+      WHERE image_url IS NULL OR image_url = '';
+    `);
 
     // Seed default Admin and Staff accounts if none exist
     const [userCount] = await conn.query('SELECT COUNT(*) as cnt FROM users');

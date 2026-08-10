@@ -68,7 +68,7 @@ const login = async (req, res, next) => {
 const getMe = async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      'SELECT user_id, firstname, lastname, gender, age, contact_number, email, role, account_status, created_at FROM users WHERE user_id = ?',
+      'SELECT user_id, customer_no, firstname, middlename, lastname, gender, age, contact_number, email, role, account_status, created_at FROM users WHERE user_id = ?',
       [req.user.user_id]
     );
 
@@ -82,7 +82,57 @@ const getMe = async (req, res, next) => {
   }
 };
 
+// Public self-registration for customers
+const registerCustomer = async (req, res, next) => {
+  try {
+    const { firstname, middlename, lastname, gender, age, contact_number, email, customer_no } = req.body;
+
+    // Validate required fields
+    if (!firstname || !lastname || !gender || !age || !contact_number || !email) {
+      return res.status(400).json({ message: 'All required fields must be filled in.' });
+    }
+
+    // Validate age range
+    const ageNum = parseInt(age);
+    if (isNaN(ageNum) || ageNum < 1 || ageNum > 120) {
+      return res.status(400).json({ message: 'Please enter a valid age.' });
+    }
+
+    // Validate gender
+    if (!['Male', 'Female', 'Other'].includes(gender)) {
+      return res.status(400).json({ message: 'Invalid gender value.' });
+    }
+
+    // Check for duplicate email
+    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [email]);
+    if (existing.length > 0) {
+      return res.status(400).json({ message: 'This email address is already registered.' });
+    }
+
+    // Use empty string placeholder for password — set by admin on approval
+    const placeholderHash = await bcrypt.hash('PENDING_APPROVAL', 10);
+
+    // Call the stored procedure (p_staff_id = NULL since self-registered)
+    const [result] = await pool.query(
+      'CALL sp_create_customer_account(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [firstname, lastname, middlename || null, gender, ageNum, contact_number, email, placeholderHash, null, customer_no || null]
+    );
+
+    const newUserId = result[0][0]?.new_user_id;
+    const finalCustomerNo = result[0][0]?.customer_no || customer_no;
+
+    res.status(201).json({
+      message: 'Registration submitted successfully! Your account is pending admin approval. You will receive your login password once your account is verified.',
+      user_id: newUserId,
+      customer_no: finalCustomerNo
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   login,
-  getMe
+  getMe,
+  registerCustomer
 };

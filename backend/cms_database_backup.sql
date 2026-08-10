@@ -146,7 +146,7 @@ CREATE TABLE `services` (
 
 /*Data for the table `services` */
 
-insert  into `services`(`service_id`,`category_id`,`service_name`,`description`,`base_price`,`unit`,`image_url`,`is_active`,`created_at`) values (1,1,'Wedding Catering Package','Full catering service for weddings (Kasal).','25000.00','package',NULL,1,'2026-07-31 18:00:20'),(2,1,'Birthday Catering Package','Catering package for birthday celebrations.','12000.00','package',NULL,1,'2026-07-31 18:00:20'),(3,1,'Baptismal Catering Package','Catering package for baptismal events.','10000.00','package',NULL,1,'2026-07-31 18:00:20'),(4,1,'Family Reunion Package','Catering package for family reunions.','15000.00','package',NULL,1,'2026-07-31 18:00:20'),(5,2,'Buffet Station Setup','Professional buffet station setup at the venue.','5000.00','package',NULL,1,'2026-07-31 18:00:20'),(6,2,'Chafing Dish Provision','Rental and setup of chafing dishes.','150.00','unit',NULL,1,'2026-07-31 18:00:20'),(7,2,'Serving Crew (per head)','Optional professional serving staff.','800.00','per head',NULL,1,'2026-07-31 18:00:20'),(8,3,'Custom Cake','Personalized custom cake for the event.','2500.00','unit',NULL,1,'2026-07-31 18:00:20'),(9,3,'Pastry Platter','Assorted pastry platter.','1800.00','platter',NULL,1,'2026-07-31 18:00:20'),(10,3,'Drink Station (Juice/Coffee/Tea)','Beverage station for guests.','3500.00','package',NULL,1,'2026-07-31 18:00:20'),(11,3,'Dessert Bar','Assorted dessert bar setup.','4500.00','package',NULL,1,'2026-07-31 18:00:20'),(12,4,'Table Rental','Rental of event tables.','100.00','unit',NULL,1,'2026-07-31 18:00:20'),(13,4,'Chair Rental','Rental of event chairs.','30.00','unit',NULL,1,'2026-07-31 18:00:20'),(14,4,'Tablecloth Rental','Rental of tablecloths.','50.00','unit',NULL,1,'2026-07-31 18:00:20'),(15,4,'Plates & Glasses Set','Rental of plates and glasses per set.','20.00','set',NULL,1,'2026-07-31 18:00:20'),(16,4,'Cutlery Set','Rental of cutlery per set.','15.00','set',NULL,1,'2026-07-31 18:00:20'),(17,4,'Serving Tray Rental','Rental of serving trays.','40.00','unit',NULL,1,'2026-07-31 18:00:20');
+insert  into `services`(`service_id`,`category_id`,`service_name`,`description`,`base_price`,`unit`,`image_url`,`is_active`,`created_at`) values (1,1,'Wedding Catering Package','Full catering service for weddings (Kasal).','25000.00','package','https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(2,1,'Birthday Catering Package','Catering package for birthday celebrations.','12000.00','package','https://images.unsplash.com/photo-1530103862676-de8c9debad1d?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(3,1,'Baptismal Catering Package','Catering package for baptismal events.','10000.00','package','https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(4,1,'Family Reunion Package','Catering package for family reunions.','15000.00','package','https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(5,2,'Buffet Station Setup','Professional buffet station setup at the venue.','5000.00','package','https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(6,2,'Chafing Dish Provision','Rental and setup of chafing dishes.','150.00','unit','https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(7,2,'Serving Crew (per head)','Optional professional serving staff.','800.00','per head','https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(8,3,'Custom Cake','Personalized custom cake for the event.','2500.00','unit','https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(9,3,'Pastry Platter','Assorted pastry platter.','1800.00','platter','https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(10,3,'Drink Station (Juice/Coffee/Tea)','Beverage station for guests.','3500.00','package','https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(11,3,'Dessert Bar','Assorted dessert bar setup.','4500.00','package','https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(12,4,'Table Rental','Rental of event tables.','100.00','unit','https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(13,4,'Chair Rental','Rental of event chairs.','30.00','unit','https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(14,4,'Tablecloth Rental','Rental of tablecloths.','50.00','unit','https://images.unsplash.com/photo-1532712938310-34cb3982ef74?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(15,4,'Plates & Glasses Set','Rental of plates and glasses per set.','20.00','set','https://images.unsplash.com/photo-1615865417236-d67f5ed658e6?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(16,4,'Cutlery Set','Rental of cutlery per set.','15.00','set','https://images.unsplash.com/photo-1584345604476-8ec5e12e42dd?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20'),(17,4,'Serving Tray Rental','Rental of serving trays.','40.00','unit','https://images.unsplash.com/photo-1581349485608-9469926a8e5e?auto=format&fit=crop&w=600&q=80',1,'2026-07-31 18:00:20');
 
 /*Table structure for table `users` */
 
@@ -154,13 +154,15 @@ DROP TABLE IF EXISTS `users`;
 
 CREATE TABLE `users` (
   `user_id` int(11) NOT NULL AUTO_INCREMENT,
+  `customer_no` varchar(20) DEFAULT NULL,
   `firstname` varchar(50) NOT NULL,
+  `middlename` varchar(50) DEFAULT NULL,
   `lastname` varchar(50) NOT NULL,
   `gender` enum('Male','Female','Other') NOT NULL,
   `age` int(11) NOT NULL,
   `contact_number` varchar(20) NOT NULL,
   `email` varchar(100) NOT NULL,
-  `password` varchar(255) NOT NULL,
+  `password` varchar(255) NOT NULL DEFAULT '',
   `role` enum('customer','staff','admin') NOT NULL DEFAULT 'customer',
   `account_status` enum('pending','verified','rejected','active','inactive') NOT NULL DEFAULT 'active',
   `created_by` int(11) DEFAULT NULL,
@@ -168,9 +170,190 @@ CREATE TABLE `users` (
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `email` (`email`),
+  UNIQUE KEY `customer_no` (`customer_no`),
   KEY `fk_users_created_by` (`created_by`),
   CONSTRAINT `fk_users_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=latin1;
+
+/*Data for the table `users` */
+
+insert  into `users`(`user_id`,`customer_no`,`firstname`,`middlename`,`lastname`,`gender`,`age`,`contact_number`,`email`,`password`,`role`,`account_status`,`created_by`,`created_at`,`updated_at`) values (1,NULL,'System',NULL,'Admin','Male',35,'09170000000','admin@cms.com','$2a$10$WKAC90poQ6GBqNzg8oR5bO3xpqvglHqCNwcis52D0sYFx69fjw7HG','admin','active',NULL,'2026-07-31 18:00:20','2026-07-31 18:00:20'),(2,NULL,'John',NULL,'Staff','Male',29,'09171111111','staff@cms.com','$2a$10$YUb1Oy8kNEGePwW5B0AdMestL/K.idtRMvm9rZVvLo0kV5qhgm/xG','staff','active',NULL,'2026-07-31 18:00:20','2026-07-31 18:00:20'),(3,'CUST-2026-0003','Maria',NULL,'Customer','Female',27,'09172222222','customer@cms.com','$2a$10$rh6fBsXruSctysebECmxW.UJuXf63dVPsYwHwr5Utqh/4YUhAqbcu','customer','verified',NULL,'2026-07-31 18:00:20','2026-07-31 18:00:20'),(4,'CUST-2026-0004','Kevin',NULL,'Esto','Male',25,'09223417787','kevin.esto@cms.com','$2a$10$q5ArIHMth6aCoPCXM3GOdu3KH0lh.pu8lxoaia6O2j1d9K1QdNvzy','customer','verified',2,'2026-07-31 18:09:52','2026-07-31 18:10:25'),(5,'CUST-2026-0005','Ara',NULL,'Arong','Female',25,'09103940897','ara.arong@cms.com','$2a$10$WrEUVYLYrHczYlzKyVP23.bH6SqTmbjPXOQfUY/i/odA6/g9Z.Pqq','customer','verified',2,'2026-07-31 18:22:41','2026-07-31 18:23:01'),(6,'CUST-2026-0006','James',NULL,'Ronolo','Other',25,'09223417787','james.ronolo@cms.com','$2a$10$QXZb2Y3W6sjpGLEHAJH1..Aiio7.9AtlxJVczONSscJYAqSP1akVW','customer','pending',2,'2026-07-31 19:18:23','2026-07-31 19:18:23');
+
+/*Table structure for table `verification_logs` */
+
+DROP TABLE IF EXISTS `verification_logs`;
+
+CREATE TABLE `verification_logs` (
+  `log_id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `reviewed_by` int(11) NOT NULL,
+  `action` enum('approved','rejected') NOT NULL,
+  `remarks` varchar(255) DEFAULT NULL,
+  `action_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`log_id`),
+  KEY `fk_vl_user` (`user_id`),
+  KEY `fk_vl_admin` (`reviewed_by`),
+  CONSTRAINT `fk_vl_admin` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_vl_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1;
+
+/*Data for the table `verification_logs` */
+
+insert  into `verification_logs`(`log_id`,`user_id`,`reviewed_by`,`action`,`remarks`,`action_date`) values (1,4,1,'approved','Documents & credentials verified by Admin.','2026-07-31 18:10:25'),(2,5,1,'approved','Documents & credentials verified by Admin.','2026-07-31 18:23:01');
+
+/* Procedure structure for procedure `sp_add_booking_item` */
+
+/*!50003 DROP PROCEDURE IF EXISTS  `sp_add_booking_item` */;
+
+DELIMITER $$
+
+/*!50003 CREATE DEFINER=`cms_db`@`%` PROCEDURE `sp_add_booking_item`(IN p_booking_id INT, IN p_service_id INT, IN p_quantity INT)
+BEGIN
+DECLARE v_price DECIMAL(10,2);
+SELECT base_price INTO v_price FROM services WHERE service_id = p_service_id;
+INSERT INTO booking_items (booking_id, service_id, quantity, unit_price, subtotal) VALUES (p_booking_id, p_service_id, p_quantity, v_price, v_price * p_quantity);
+UPDATE bookings b SET total_amount = (SELECT COALESCE(SUM(subtotal), 0) FROM booking_items WHERE booking_id = p_booking_id) WHERE b.booking_id = p_booking_id;
+END */$$
+DELIMITER ;
+
+/* Procedure structure for procedure `sp_admin_dashboard_summary` */
+
+/*!50003 DROP PROCEDURE IF EXISTS  `sp_admin_dashboard_summary` */;
+
+DELIMITER $$
+
+/*!50003 CREATE DEFINER=`cms_db`@`%` PROCEDURE `sp_admin_dashboard_summary`()
+BEGIN
+SELECT (SELECT COUNT(*) FROM users WHERE role = 'customer' AND account_status = 'pending') AS pending_verifications, (SELECT COUNT(*) FROM bookings WHERE status = 'pending') AS pending_bookings, (SELECT COUNT(*) FROM bookings WHERE status = 'completed') AS completed_bookings, (SELECT COALESCE(SUM(amount_paid), 0) FROM payments) AS total_revenue;
+END */$$
+DELIMITER ;
+
+/* Procedure structure for procedure `sp_create_booking` */
+
+/*!50003 DROP PROCEDURE IF EXISTS  `sp_create_booking` */;
+
+DELIMITER $$
+
+/*!50003 CREATE DEFINER=`cms_db`@`%` PROCEDURE `sp_create_booking`(IN p_customer_id INT, IN p_event_type VARCHAR(100), IN p_event_date DATE, IN p_venue_address VARCHAR(255), IN p_guest_count INT)
+BEGIN
+INSERT INTO bookings (customer_id, event_type, event_date, venue_address, guest_count, status) VALUES (p_customer_id, p_event_type, p_event_date, p_venue_address, p_guest_count, 'pending');
+SELECT LAST_INSERT_ID() AS new_booking_id;
+END */$$
+DELIMITER ;
+
+/* Procedure structure for procedure `sp_create_customer_account` */
+
+/*!50003 DROP PROCEDURE IF EXISTS  `sp_create_customer_account` */;
+
+/*!50003 CREATE DEFINER=`cms_db`@`%` PROCEDURE `sp_create_customer_account`(
+  IN p_firstname VARCHAR(50),
+  IN p_lastname VARCHAR(50),
+  IN p_middlename VARCHAR(50),
+  IN p_gender VARCHAR(10),
+  IN p_age INT,
+  IN p_contact_number VARCHAR(20),
+  IN p_email VARCHAR(100),
+  IN p_password_hash VARCHAR(255),
+  IN p_staff_id INT,
+  IN p_customer_no VARCHAR(20)
+)
+BEGIN
+  DECLARE new_id INT;
+  DECLARE v_cust_no VARCHAR(20);
+
+  IF p_customer_no IS NOT NULL AND p_customer_no != '' THEN
+    SET v_cust_no = p_customer_no;
+  ELSE
+    SET v_cust_no = NULL;
+  END IF;
+
+  INSERT INTO users (customer_no, firstname, middlename, lastname, gender, age, contact_number, email, password, role, account_status, created_by)
+  VALUES (v_cust_no, p_firstname, p_middlename, p_lastname, p_gender, p_age, p_contact_number, p_email, p_password_hash, 'customer', 'pending', p_staff_id);
+
+  SET new_id = LAST_INSERT_ID();
+
+  IF v_cust_no IS NULL THEN
+    SET v_cust_no = CONCAT('CUST-', YEAR(NOW()), '-', LPAD(new_id, 4, '0'));
+    UPDATE users SET customer_no = v_cust_no WHERE user_id = new_id;
+  END IF;
+
+  INSERT INTO notifications (user_id, message)
+    SELECT user_id, CONCAT('New customer account "', p_firstname, ' ', p_lastname, '" awaiting verification.')
+    FROM users WHERE role = 'admin';
+
+  SELECT new_id AS new_user_id, v_cust_no AS customer_no;
+END */$$
+DELIMITER ;
+
+/* Procedure structure for procedure `sp_get_services_by_category` */
+
+/*!50003 DROP PROCEDURE IF EXISTS  `sp_get_services_by_category` */;
+
+DELIMITER $$
+
+/*!50003 CREATE DEFINER=`cms_db`@`%` PROCEDURE `sp_get_services_by_category`()
+BEGIN
+SELECT c.category_id, c.category_name, c.description AS category_description, s.service_id, s.service_name, s.description AS service_description, s.base_price, s.unit, s.image_url FROM service_categories c JOIN services s ON s.category_id = c.category_id WHERE c.is_active = TRUE AND s.is_active = TRUE ORDER BY c.category_id, s.service_name;
+END */$$
+DELIMITER ;
+
+/* Procedure structure for procedure `sp_record_payment` */
+
+/*!50003 DROP PROCEDURE IF EXISTS  `sp_record_payment` */;
+
+DELIMITER $$
+
+/*!50003 CREATE DEFINER=`cms_db`@`%` PROCEDURE `sp_record_payment`(IN p_booking_id INT, IN p_amount_paid DECIMAL(10,2), IN p_payment_method VARCHAR(20), IN p_reference_no VARCHAR(100), IN p_recorded_by INT)
+BEGIN
+DECLARE v_total DECIMAL(10,2);
+DECLARE v_paid DECIMAL(10,2);
+INSERT INTO payments (booking_id, amount_paid, payment_method, reference_no, recorded_by) VALUES (p_booking_id, p_amount_paid, p_payment_method, p_reference_no, p_recorded_by);
+SELECT total_amount INTO v_total FROM bookings WHERE booking_id = p_booking_id;
+SELECT COALESCE(SUM(amount_paid), 0) INTO v_paid FROM payments WHERE booking_id = p_booking_id;
+SELECT v_total AS total_amount, v_paid AS total_paid, (v_total - v_paid) AS balance;
+END */$$
+DELIMITER ;
+
+/* Procedure structure for procedure `sp_update_booking_status` */
+
+/*!50003 DROP PROCEDURE IF EXISTS  `sp_update_booking_status` */;
+
+DELIMITER $$
+
+/*!50003 CREATE DEFINER=`cms_db`@`%` PROCEDURE `sp_update_booking_status`(IN p_booking_id INT, IN p_status VARCHAR(20), IN p_staff_id INT)
+BEGIN
+UPDATE bookings SET status = p_status, handled_by = COALESCE(p_staff_id, handled_by) WHERE booking_id = p_booking_id;
+END */$$
+DELIMITER ;
+
+/* Procedure structure for procedure `sp_verify_customer_account` */
+
+/*!50003 DROP PROCEDURE IF EXISTS  `sp_verify_customer_account` */;
+
+DELIMITER $$
+
+/*!50003 CREATE DEFINER=`cms_db`@`%` PROCEDURE `sp_verify_customer_account`(
+  IN p_user_id INT,
+  IN p_admin_id INT,
+  IN p_action VARCHAR(10),
+  IN p_remarks VARCHAR(255),
+  IN p_new_password_hash VARCHAR(255)
+)
+BEGIN
+  IF p_action = 'approved' AND p_new_password_hash IS NOT NULL AND p_new_password_hash != '' THEN
+    UPDATE users SET account_status = 'verified', password = p_new_password_hash WHERE user_id = p_user_id AND role = 'customer';
+  ELSE
+    UPDATE users SET account_status = IF(p_action = 'approved', 'verified', 'rejected') WHERE user_id = p_user_id AND role = 'customer';
+  END IF;
+  INSERT INTO verification_logs (user_id, reviewed_by, action, remarks) VALUES (p_user_id, p_admin_id, p_action, p_remarks);
+END */$$
+DELIMITER ;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
 
 /*Data for the table `users` */
 

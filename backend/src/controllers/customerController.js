@@ -3,11 +3,20 @@ const bcrypt = require('bcryptjs');
 
 const updateProfile = async (req, res, next) => {
   try {
-    const { firstname, lastname, gender, age, contact_number, password } = req.body;
+    const { firstname, middlename, lastname, gender, age, contact_number, password } = req.body;
     const userId = req.user.user_id;
 
-    let query = 'UPDATE users SET firstname = ?, lastname = ?, gender = ?, age = ?, contact_number = ?';
-    let params = [firstname, lastname, gender, age, contact_number];
+    if (!firstname || !lastname || !gender || age === undefined || age === null || age === '' || !contact_number) {
+      return res.status(400).json({ message: 'All required profile fields must be filled.' });
+    }
+
+    const ageNum = parseInt(age, 10);
+    if (isNaN(ageNum) || ageNum < 1 || ageNum > 120) {
+      return res.status(400).json({ message: 'Please enter a valid age (1-120).' });
+    }
+
+    let query = 'UPDATE users SET firstname = ?, middlename = ?, lastname = ?, gender = ?, age = ?, contact_number = ?';
+    let params = [firstname.trim(), middlename ? middlename.trim() : null, lastname.trim(), gender, ageNum, contact_number.trim()];
 
     if (password && password.trim() !== '') {
       const hashedPassword = await bcrypt.hash(password, 10);
