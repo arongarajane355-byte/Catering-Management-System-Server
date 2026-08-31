@@ -15,6 +15,11 @@ const createCustomerAccount = async (req, res, next) => {
       return res.status(400).json({ message: 'Please enter a valid age (1-120).' });
     }
 
+    const cleanContact = (contact_number || '').trim();
+    if (!/^\d{11}$/.test(cleanContact)) {
+      return res.status(400).json({ message: 'Contact number must be exactly 11 digits (e.g. 09123456789).' });
+    }
+
     // Check if email exists
     const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {

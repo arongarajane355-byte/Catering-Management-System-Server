@@ -15,8 +15,13 @@ const updateProfile = async (req, res, next) => {
       return res.status(400).json({ message: 'Please enter a valid age (1-120).' });
     }
 
+    const cleanContact = (contact_number || '').trim();
+    if (!/^\d{11}$/.test(cleanContact)) {
+      return res.status(400).json({ message: 'Contact number must be exactly 11 digits (e.g. 09123456789).' });
+    }
+
     let query = 'UPDATE users SET firstname = ?, middlename = ?, lastname = ?, gender = ?, age = ?, contact_number = ?';
-    let params = [firstname.trim(), middlename ? middlename.trim() : null, lastname.trim(), gender, ageNum, contact_number.trim()];
+    let params = [firstname.trim(), middlename ? middlename.trim() : null, lastname.trim(), gender, ageNum, cleanContact];
 
     if (password && password.trim() !== '') {
       const hashedPassword = await bcrypt.hash(password, 10);

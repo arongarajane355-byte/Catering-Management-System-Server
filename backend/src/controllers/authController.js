@@ -98,6 +98,12 @@ const registerCustomer = async (req, res, next) => {
       return res.status(400).json({ message: 'Please enter a valid age.' });
     }
 
+    // Validate contact number (standard 11-digit numeric)
+    const cleanContact = (contact_number || '').trim();
+    if (!/^\d{11}$/.test(cleanContact)) {
+      return res.status(400).json({ message: 'Contact number must be exactly 11 digits (e.g. 09123456789).' });
+    }
+
     // Validate gender
     if (!['Male', 'Female', 'Other'].includes(gender)) {
       return res.status(400).json({ message: 'Invalid gender value.' });

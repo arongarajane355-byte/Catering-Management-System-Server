@@ -10,6 +10,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const workflowRoutes = require('./routes/workflowRoutes');
 
 const path = require('path');
 
@@ -385,6 +386,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/workflow', workflowRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'CMS Backend API is running', uptime: `${Math.floor((Date.now() - SERVER_START) / 1000)}s` });
