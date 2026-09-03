@@ -20,8 +20,13 @@ const createCustomerAccount = async (req, res, next) => {
       return res.status(400).json({ message: 'Contact number must be exactly 11 digits (e.g. 09123456789).' });
     }
 
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail.endsWith('@gmail.com')) {
+      return res.status(400).json({ message: 'Customer email address must use @gmail.com.' });
+    }
+
     // Check if email exists
-    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [email]);
+    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [cleanEmail]);
     if (existing.length > 0) {
       return res.status(400).json({ message: 'A user with this email already exists.' });
     }
@@ -31,7 +36,7 @@ const createCustomerAccount = async (req, res, next) => {
 
     const [result] = await pool.query(
       'CALL sp_create_customer_account(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [firstname, lastname, middlename || null, gender, parseInt(age), contact_number, email, passwordHash, staffId, customer_no || null]
+      [firstname, lastname, middlename || null, gender, parseInt(age), cleanContact, cleanEmail, passwordHash, staffId, customer_no || null]
     );
 
     const newUserId = result[0][0]?.new_user_id;

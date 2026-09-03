@@ -337,6 +337,11 @@ END`
       WHERE image_url IS NULL OR image_url = '';
     `);
 
+    // Migration: Update any existing @cms.com emails in users table to @gmail.com
+    await conn.query(`
+      UPDATE users SET email = REPLACE(email, '@cms.com', '@gmail.com') WHERE email LIKE '%@cms.com';
+    `);
+
     // Seed default Admin and Staff accounts if none exist
     const [userCount] = await conn.query('SELECT COUNT(*) as cnt FROM users');
     if (userCount[0].cnt === 0) {
@@ -347,9 +352,9 @@ END`
 
       await conn.query(`
         INSERT INTO users (firstname, lastname, gender, age, contact_number, email, password, role, account_status) VALUES
-        ('System', 'Admin', 'Male', 35, '09170000000', 'admin@cms.com', '${adminPassHash}', 'admin', 'active'),
-        ('John', 'Staff', 'Male', 29, '09171111111', 'staff@cms.com', '${staffPassHash}', 'staff', 'active'),
-        ('Maria', 'Customer', 'Female', 27, '09172222222', 'customer@cms.com', '${customerPassHash}', 'customer', 'verified');
+        ('System', 'Admin', 'Male', 35, '09170000000', 'admin@gmail.com', '${adminPassHash}', 'admin', 'active'),
+        ('John', 'Staff', 'Male', 29, '09171111111', 'staff@gmail.com', '${staffPassHash}', 'staff', 'active'),
+        ('Maria', 'Customer', 'Female', 27, '09172222222', 'customer@gmail.com', '${customerPassHash}', 'customer', 'verified');
       `);
     }
 

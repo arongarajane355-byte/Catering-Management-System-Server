@@ -119,7 +119,12 @@ const createUser = async (req, res, next) => {
       return res.status(400).json({ message: 'Contact number must be exactly 11 digits (e.g. 09123456789).' });
     }
 
-    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [email]);
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail.endsWith('@gmail.com')) {
+      return res.status(400).json({ message: 'User email address must use @gmail.com.' });
+    }
+
+    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [cleanEmail]);
     if (existing.length > 0) {
       return res.status(400).json({ message: 'User with this email already exists.' });
     }
@@ -130,14 +135,14 @@ const createUser = async (req, res, next) => {
       // Use SP for customers so customer_no is auto-generated
       await pool.query(
         'CALL sp_create_customer_account(?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [firstname, lastname, middlename || null, gender, parseInt(age), cleanContact, email, passwordHash, req.user.user_id]
+        [firstname, lastname, middlename || null, gender, parseInt(age), cleanContact, cleanEmail, passwordHash, req.user.user_id]
       );
       // Staff-created customers skip pending — set directly to verified
-      await pool.query('UPDATE users SET account_status = ? WHERE email = ?', ['verified', email]);
+      await pool.query('UPDATE users SET account_status = ? WHERE email = ?', ['verified', cleanEmail]);
     } else {
       await pool.query(
         'INSERT INTO users (firstname, middlename, lastname, gender, age, contact_number, email, password, role, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [firstname, middlename || null, lastname, gender, parseInt(age), cleanContact, email, passwordHash, userRole, status]
+        [firstname, middlename || null, lastname, gender, parseInt(age), cleanContact, cleanEmail, passwordHash, userRole, status]
       );
     }
 
