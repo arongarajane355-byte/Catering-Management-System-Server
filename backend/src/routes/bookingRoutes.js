@@ -4,10 +4,14 @@ const {
   createBooking,
   getBookingById,
   listBookings,
-  updateBookingStatus
+  updateBookingStatus,
+  getBookedDates
 } = require('../controllers/bookingController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/roleMiddleware');
+
+// Public endpoint: check unavailable event dates (no token required)
+router.get('/booked-dates', getBookedDates);
 
 router.use(verifyToken);
 

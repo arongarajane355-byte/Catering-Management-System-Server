@@ -10,6 +10,21 @@ const createBooking = async (req, res, next) => {
       return res.status(400).json({ message: 'Event details and at least one service/item are required.' });
     }
 
+    // ── DATE CONFLICT CHECK ──────────────────────────────────────────────
+    const [conflictRows] = await pool.query(
+      `SELECT booking_id FROM bookings
+       WHERE event_date = ? AND status NOT IN ('cancelled')
+       LIMIT 1`,
+      [event_date]
+    );
+
+    if (conflictRows.length > 0) {
+      return res.status(409).json({
+        message: 'This date is already booked. Please select a different event date.'
+      });
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     // Call stored procedure to create booking header
     const [headerResult] = await pool.query(
       'CALL sp_create_booking(?, ?, ?, ?, ?)',
@@ -138,9 +153,25 @@ const updateBookingStatus = async (req, res, next) => {
   }
 };
 
+// Get all booked (non-cancelled) event dates — used by CustomerDashboard to block unavailable dates
+const getBookedDates = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT DISTINCT DATE_FORMAT(event_date, '%Y-%m-%d') AS event_date
+       FROM bookings
+       WHERE status NOT IN ('cancelled')
+       ORDER BY event_date ASC`
+    );
+    res.json(rows.map(r => r.event_date));
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createBooking,
   getBookingById,
   listBookings,
-  updateBookingStatus
+  updateBookingStatus,
+  getBookedDates
 };
