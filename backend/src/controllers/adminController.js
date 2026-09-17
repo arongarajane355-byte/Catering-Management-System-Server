@@ -180,6 +180,282 @@ const getAllUsers = async (req, res, next) => {
   }
 };
 
+// -------------------------------------------------------------
+// REPORTS & ANALYTICS ENDPOINTS
+// -------------------------------------------------------------
+
+const getAdminReportsSummary = async (req, res, next) => {
+  try {
+    const [totBilled] = await pool.query('SELECT COALESCE(SUM(total_amount), 0) AS total_billed, COUNT(*) AS total_bookings FROM bookings');
+    const [totCollected] = await pool.query('SELECT COALESCE(SUM(amount_paid), 0) AS total_collected FROM payments');
+    const [statusBreakdown] = await pool.query('SELECT status, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings GROUP BY status');
+    const [methodBreakdown] = await pool.query('SELECT payment_method, COUNT(*) AS tx_count, COALESCE(SUM(amount_paid), 0) AS total_amount FROM payments GROUP BY payment_method');
+    const [userCounts] = await pool.query('SELECT role, account_status, COUNT(*) AS count FROM users GROUP BY role, account_status');
+
+    const total_billed = parseFloat(totBilled[0]?.total_billed || 0);
+    const total_collected = parseFloat(totCollected[0]?.total_collected || 0);
+    const outstanding_balance = Math.max(0, total_billed - total_collected);
+    const total_bookings = parseInt(totBilled[0]?.total_bookings || 0);
+
+    res.json({
+      total_billed,
+      total_collected,
+      outstanding_balance,
+      total_bookings,
+      status_breakdown: statusBreakdown,
+      payment_methods_breakdown: methodBreakdown,
+      user_counts: userCounts
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAdminBookingsReport = async (req, res, next) => {
+  try {
+    const [bookings] = await pool.query(`
+      SELECT 
+        b.booking_id,
+        b.customer_id,
+        b.handled_by,
+        b.event_type,
+        b.event_date,
+        b.venue_address,
+        b.guest_count,
+        b.status,
+        b.total_amount,
+        b.created_at,
+        u.firstname AS customer_firstname,
+        u.lastname AS customer_lastname,
+        u.email AS customer_email,
+        u.contact_number AS customer_phone,
+        u.customer_no,
+        s.firstname AS staff_firstname,
+        s.lastname AS staff_lastname,
+        s.email AS staff_email,
+        COALESCE(p.paid_amount, 0) AS total_paid,
+        (b.total_amount - COALESCE(p.paid_amount, 0)) AS balance,
+        COALESCE(items_cnt.item_count, 0) AS total_items,
+        COALESCE(items_cnt.items_summary, 'No items selected') AS items_summary
+      FROM bookings b
+      JOIN users u ON b.customer_id = u.user_id
+      LEFT JOIN users s ON b.handled_by = s.user_id
+      LEFT JOIN (
+        SELECT booking_id, SUM(amount_paid) AS paid_amount
+        FROM payments
+        GROUP BY booking_id
+      ) p ON b.booking_id = p.booking_id
+      LEFT JOIN (
+        SELECT 
+          bi.booking_id, 
+          COUNT(*) AS item_count,
+          GROUP_CONCAT(CONCAT(srv.service_name, ' (x', bi.quantity, ')') SEPARATOR ', ') AS items_summary
+        FROM booking_items bi
+        JOIN services srv ON bi.service_id = srv.service_id
+        GROUP BY bi.booking_id
+      ) items_cnt ON b.booking_id = items_cnt.booking_id
+      ORDER BY b.created_at DESC
+    `);
+    res.json(bookings);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAdminTransactionsReport = async (req, res, next) => {
+  try {
+    const [transactions] = await pool.query(`
+      SELECT 
+        p.payment_id,
+        p.booking_id,
+        p.amount_paid,
+        p.payment_method,
+        p.reference_no,
+        p.payment_date,
+        p.recorded_by,
+        st.firstname AS staff_firstname,
+        st.lastname AS staff_lastname,
+        st.email AS staff_email,
+        st.role AS staff_role,
+        c.firstname AS customer_firstname,
+        c.lastname AS customer_lastname,
+        c.customer_no,
+        b.event_type,
+        b.status AS booking_status,
+        b.total_amount AS booking_total
+      FROM payments p
+      LEFT JOIN users st ON p.recorded_by = st.user_id
+      JOIN bookings b ON p.booking_id = b.booking_id
+      JOIN users c ON b.customer_id = c.user_id
+      ORDER BY p.payment_date DESC
+    `);
+    res.json(transactions);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAdminStaffPerformance = async (req, res, next) => {
+  try {
+    const [performance] = await pool.query(`
+      SELECT 
+        u.user_id AS staff_id,
+        u.firstname,
+        u.lastname,
+        u.email,
+        u.contact_number,
+        u.account_status,
+        COUNT(DISTINCT b.booking_id) AS total_handled_bookings,
+        COUNT(DISTINCT CASE WHEN b.status = 'completed' THEN b.booking_id END) AS completed_bookings,
+        COUNT(DISTINCT p.payment_id) AS payments_processed,
+        COALESCE(SUM(p.amount_paid), 0) AS total_money_collected
+      FROM users u
+      LEFT JOIN bookings b ON b.handled_by = u.user_id
+      LEFT JOIN payments p ON p.recorded_by = u.user_id
+      WHERE u.role IN ('staff', 'admin')
+      GROUP BY u.user_id, u.firstname, u.lastname, u.email, u.contact_number, u.account_status
+      ORDER BY total_money_collected DESC, total_handled_bookings DESC
+    `);
+    res.json(performance);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAdminStaffReportsDetail = async (req, res, next) => {
+  try {
+    const [encodedCustomers] = await pool.query(`
+      SELECT 
+        c.user_id,
+        c.customer_no,
+        c.firstname AS customer_firstname,
+        c.lastname AS customer_lastname,
+        c.email AS customer_email,
+        c.contact_number AS customer_phone,
+        c.account_status,
+        c.created_at,
+        c.created_by,
+        st.firstname AS staff_firstname,
+        st.lastname AS staff_lastname,
+        st.email AS staff_email
+      FROM users c
+      JOIN users st ON c.created_by = st.user_id
+      WHERE c.role = 'customer'
+      ORDER BY c.created_at DESC
+    `);
+
+    const [staffPayments] = await pool.query(`
+      SELECT 
+        p.payment_id,
+        p.booking_id,
+        p.amount_paid,
+        p.payment_method,
+        p.reference_no,
+        p.payment_date,
+        p.recorded_by,
+        st.firstname AS staff_firstname,
+        st.lastname AS staff_lastname,
+        st.email AS staff_email,
+        c.firstname AS customer_firstname,
+        c.lastname AS customer_lastname,
+        c.customer_no,
+        b.event_type
+      FROM payments p
+      JOIN users st ON p.recorded_by = st.user_id
+      JOIN bookings b ON p.booking_id = b.booking_id
+      JOIN users c ON b.customer_id = c.user_id
+      WHERE st.role = 'staff'
+      ORDER BY p.payment_date DESC
+    `);
+
+    const [staffLogs] = await pool.query(`
+      SELECT 
+        a.log_id,
+        a.user_id,
+        a.action,
+        a.entity_type,
+        a.entity_id,
+        a.details,
+        a.created_at,
+        st.firstname AS staff_firstname,
+        st.lastname AS staff_lastname,
+        st.email AS staff_email
+      FROM audit_logs a
+      JOIN users st ON a.user_id = st.user_id
+      WHERE st.role = 'staff'
+      ORDER BY a.created_at DESC
+      LIMIT 100
+    `);
+
+    const [staffBookings] = await pool.query(`
+      SELECT 
+        b.booking_id,
+        b.customer_id,
+        b.event_type,
+        b.event_date,
+        b.venue_address,
+        b.guest_count,
+        b.status,
+        b.total_amount,
+        b.created_at,
+        b.handled_by,
+        st.firstname AS staff_firstname,
+        st.lastname AS staff_lastname,
+        st.email AS staff_email,
+        c.firstname AS customer_firstname,
+        c.lastname AS customer_lastname,
+        c.customer_no,
+        c.contact_number AS customer_phone,
+        COALESCE(p.paid_amount, 0) AS total_paid
+      FROM bookings b
+      JOIN users st ON b.handled_by = st.user_id
+      JOIN users c ON b.customer_id = c.user_id
+      LEFT JOIN (
+        SELECT booking_id, SUM(amount_paid) AS paid_amount
+        FROM payments
+        GROUP BY booking_id
+      ) p ON b.booking_id = p.booking_id
+      WHERE st.role = 'staff'
+      ORDER BY b.created_at DESC
+    `);
+
+    res.json({
+      encodedCustomers,
+      staffPayments,
+      staffBookings,
+      staffLogs
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAdminAuditLogs = async (req, res, next) => {
+  try {
+    const [logs] = await pool.query(`
+      SELECT 
+        a.log_id,
+        a.user_id,
+        a.action,
+        a.entity_type,
+        a.entity_id,
+        a.details,
+        a.created_at,
+        u.firstname,
+        u.lastname,
+        u.email,
+        u.role
+      FROM audit_logs a
+      LEFT JOIN users u ON a.user_id = u.user_id
+      ORDER BY a.created_at DESC
+      LIMIT 200
+    `);
+    res.json(logs);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getPendingVerifications,
   verifyCustomerAccount,
@@ -188,5 +464,11 @@ module.exports = {
   getAllUsers,
   createStaff,
   createUser,
-  toggleUserStatus
+  toggleUserStatus,
+  getAdminReportsSummary,
+  getAdminBookingsReport,
+  getAdminTransactionsReport,
+  getAdminStaffPerformance,
+  getAdminStaffReportsDetail,
+  getAdminAuditLogs
 };

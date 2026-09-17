@@ -147,6 +147,13 @@ const updateBookingStatus = async (req, res, next) => {
       [id, status, staffId]
     );
 
+    try {
+      await pool.query(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)',
+        [staffId, 'BOOKING_STATUS_UPDATE', 'booking', id, `Staff updated Booking #BK-${id} status to ${status}`]
+      );
+    } catch (logErr) { }
+
     res.json({ message: `Booking status updated to ${status}.` });
   } catch (error) {
     next(error);

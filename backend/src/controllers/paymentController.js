@@ -15,6 +15,13 @@ const recordPayment = async (req, res, next) => {
       [booking_id, parseFloat(amount_paid), payment_method, reference_no || '', recordedBy]
     );
 
+    try {
+      await pool.query(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)',
+        [recordedBy, 'PAYMENT_RECORDED', 'payment', booking_id, `Payment of PHP ${parseFloat(amount_paid).toFixed(2)} recorded via ${payment_method.toUpperCase()} for Booking #BK-${booking_id}`]
+      );
+    } catch (logErr) { }
+
     res.status(201).json({
       message: 'Payment recorded successfully.',
       ledger: result[0][0]

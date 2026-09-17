@@ -42,6 +42,13 @@ const createCustomerAccount = async (req, res, next) => {
     const newUserId = result[0][0]?.new_user_id;
     const finalCustomerNo = result[0][0]?.customer_no || customer_no;
 
+    try {
+      await pool.query(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)',
+        [staffId, 'CUSTOMER_ENCODED', 'user', newUserId, `Staff encoded new customer profile: ${firstname} ${lastname} (${finalCustomerNo})`]
+      );
+    } catch (logErr) { }
+
     res.status(201).json({
       message: 'Customer account created successfully and routed to Admin for verification.',
       new_user_id: newUserId,

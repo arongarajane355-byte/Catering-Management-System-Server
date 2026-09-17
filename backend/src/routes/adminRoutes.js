@@ -8,7 +8,13 @@ const {
   getAllUsers,
   createStaff,
   createUser,
-  toggleUserStatus
+  toggleUserStatus,
+  getAdminReportsSummary,
+  getAdminBookingsReport,
+  getAdminTransactionsReport,
+  getAdminStaffPerformance,
+  getAdminStaffReportsDetail,
+  getAdminAuditLogs
 } = require('../controllers/adminController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/roleMiddleware');
@@ -24,5 +30,17 @@ router.get('/users', getAllUsers);
 router.post('/staff', createStaff);
 router.post('/users', createUser);
 router.put('/user-status', toggleUserStatus);
+
+// Reports & Monitoring Routes
+router.get('/reports/summary', getAdminReportsSummary);
+router.get('/reports/bookings', getAdminBookingsReport);
+router.get('/reports/transactions', getAdminTransactionsReport);
+router.get('/reports/staff-performance', getAdminStaffPerformance);
+router.get('/reports/staff-details', getAdminStaffReportsDetail);
+router.get('/reports/staff-detail', getAdminStaffReportsDetail);
+router.get('/reports/audit-logs', getAdminAuditLogs);
+router.get('/audit-logs', getAdminAuditLogs);
+
+module.exports = router;
 
 module.exports = router;

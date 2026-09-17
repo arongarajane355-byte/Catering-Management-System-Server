@@ -60,10 +60,10 @@ async function initDb() {
     // Ensure middlename and customer_no columns exist if users table already existed
     try {
       await conn.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS middlename VARCHAR(50) NULL AFTER firstname`);
-    } catch (e) {}
+    } catch (e) { }
     try {
       await conn.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_no VARCHAR(20) NULL UNIQUE AFTER user_id`);
-    } catch (e) {}
+    } catch (e) { }
 
     await conn.query(`CREATE TABLE IF NOT EXISTS verification_logs (
       log_id        INT AUTO_INCREMENT PRIMARY KEY,
@@ -144,6 +144,17 @@ async function initDb() {
       created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
     )`);
+
+    await conn.query(`CREATE TABLE IF NOT EXISTS audit_logs (
+      log_id      INT AUTO_INCREMENT PRIMARY KEY,
+      user_id     INT NOT NULL,
+      action      VARCHAR(100) NOT NULL,
+      entity_type VARCHAR(50) NOT NULL,
+      entity_id   INT NULL,
+      details     TEXT NULL,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
 
     // Add self-referencing FK on users.created_by (ignore if already exists)
     try {
