@@ -59,14 +59,27 @@ const createCustomerAccount = async (req, res, next) => {
   }
 };
 
-// Get accounts created by staff
+// Get accounts created by staff (with outstanding balance and service avail eligibility)
 const getCreatedCustomers = async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
       SELECT u.user_id, u.customer_no, u.firstname, u.middlename, u.lastname, u.gender, u.age, u.contact_number, u.email, u.account_status, u.created_at,
-             vl.action, vl.remarks, vl.action_date
+             vl.action, vl.remarks, vl.action_date,
+             COALESCE(bal.total_balance, 0) AS outstanding_balance,
+             COALESCE(bal.unpaid_count, 0) AS unpaid_bookings_count
       FROM users u
       LEFT JOIN verification_logs vl ON u.user_id = vl.user_id
+      LEFT JOIN (
+        SELECT b.customer_id,
+               SUM(GREATEST(0, b.total_amount - COALESCE(p_sub.total_paid, 0))) AS total_balance,
+               COUNT(CASE WHEN (b.total_amount - COALESCE(p_sub.total_paid, 0)) > 0 THEN 1 END) AS unpaid_count
+        FROM bookings b
+        LEFT JOIN (
+          SELECT booking_id, SUM(amount_paid) AS total_paid FROM payments GROUP BY booking_id
+        ) p_sub ON b.booking_id = p_sub.booking_id
+        WHERE b.status NOT IN ('cancelled')
+        GROUP BY b.customer_id
+      ) bal ON u.user_id = bal.customer_id
       WHERE u.role = 'customer' AND u.created_by IS NOT NULL
       ORDER BY u.created_at DESC
     `);
@@ -90,6 +103,16 @@ const getStaffDashboard = async (req, res, next) => {
       [staffId]
     );
 
+    const [unpaidSummary] = await pool.query(`
+      SELECT COUNT(DISTINCT b.customer_id) as count,
+             COALESCE(SUM(GREATEST(0, b.total_amount - COALESCE(p_sub.total_paid, 0))), 0) as total_unpaid_amount
+      FROM bookings b
+      LEFT JOIN (
+        SELECT booking_id, SUM(amount_paid) AS total_paid FROM payments GROUP BY booking_id
+      ) p_sub ON b.booking_id = p_sub.booking_id
+      WHERE b.status NOT IN ('cancelled') AND (b.total_amount - COALESCE(p_sub.total_paid, 0)) > 0
+    `);
+
     const [upcomingEvents] = await pool.query(
       'SELECT b.*, u.firstname, u.lastname, u.contact_number FROM bookings b JOIN users u ON b.customer_id = u.user_id WHERE b.status NOT IN ("completed", "cancelled") ORDER BY b.event_date ASC LIMIT 10'
     );
@@ -97,6 +120,8 @@ const getStaffDashboard = async (req, res, next) => {
     res.json({
       pending_accounts: pendingAccounts[0].count,
       assigned_bookings: assignedBookings[0].count,
+      unpaid_customers_count: unpaidSummary[0].count,
+      total_unpaid_amount: unpaidSummary[0].total_unpaid_amount,
       upcoming_events: upcomingEvents
     });
   } catch (error) {

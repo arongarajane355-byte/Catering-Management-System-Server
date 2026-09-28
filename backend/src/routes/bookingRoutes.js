@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   createBooking,
+  checkBookingEligibility,
   getBookingById,
   listBookings,
   updateBookingStatus,
@@ -15,6 +16,7 @@ router.get('/booked-dates', getBookedDates);
 
 router.use(verifyToken);
 
+router.get('/check-eligibility', requireRole('customer'), checkBookingEligibility);
 router.post('/', requireRole('customer'), createBooking);
 router.get('/', listBookings);
 router.get('/:id', getBookingById);

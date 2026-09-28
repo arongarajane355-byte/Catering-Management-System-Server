@@ -19,6 +19,32 @@ const createBookingRequest = async (req, res, next) => {
       return res.status(400).json({ message: 'Event type, date, venue address, and guest count are required.' });
     }
 
+    // ── OUTSTANDING BALANCE CHECK (CATERING POLICY) ──────────────────────
+    const [unpaidBookings] = await pool.query(
+      `SELECT b.booking_id, b.event_type, b.event_date, b.total_amount,
+              COALESCE(p_sub.total_paid, 0) AS total_paid,
+              (b.total_amount - COALESCE(p_sub.total_paid, 0)) AS balance
+       FROM bookings b
+       LEFT JOIN (
+         SELECT booking_id, SUM(amount_paid) AS total_paid FROM payments GROUP BY booking_id
+       ) p_sub ON b.booking_id = p_sub.booking_id
+       WHERE b.customer_id = ? AND b.status NOT IN ('cancelled')
+       HAVING balance > 0
+       ORDER BY b.created_at DESC`,
+      [customerId]
+    );
+
+    if (unpaidBookings.length > 0) {
+      const totalUnpaid = unpaidBookings.reduce((sum, b) => sum + parseFloat(b.balance), 0);
+      const topUnpaid = unpaidBookings[0];
+      return res.status(403).json({
+        message: `Policy Restriction: You have an outstanding unpaid balance of ₱${parseFloat(topUnpaid.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })} on Booking #BK-${topUnpaid.booking_id}. In accordance with catering policy, all existing balances must be fully paid before submitting new service requests.`,
+        code: 'OUTSTANDING_BALANCE_EXISTS',
+        has_unpaid_balance: true,
+        unpaid_balance: totalUnpaid
+      });
+    }
+
     const [headerResult] = await pool.query(
       'CALL sp_create_booking_request(?, ?, ?, ?, ?, ?, ?)',
       [
@@ -131,6 +157,44 @@ const reviewBookingRequest = async (req, res, next) => {
 
     if (!action || !['approved', 'rejected'].includes(action)) {
       return res.status(400).json({ message: 'Valid action (approved/rejected) is required.' });
+    }
+
+    if (action === 'approved') {
+      const [requestRows] = await pool.query(
+        'SELECT customer_id FROM booking_requests WHERE request_id = ?',
+        [id]
+      );
+
+      if (requestRows.length === 0) {
+        return res.status(404).json({ message: 'Booking request not found.' });
+      }
+
+      const [unpaidBookings] = await pool.query(
+        `SELECT b.booking_id, b.event_type, b.total_amount,
+                COALESCE(p_sub.total_paid, 0) AS total_paid,
+                (b.total_amount - COALESCE(p_sub.total_paid, 0)) AS balance
+         FROM bookings b
+         LEFT JOIN (
+           SELECT booking_id, SUM(amount_paid) AS total_paid
+           FROM payments
+           GROUP BY booking_id
+         ) p_sub ON b.booking_id = p_sub.booking_id
+         WHERE b.customer_id = ? AND b.status != 'cancelled'
+         HAVING balance > 0
+         ORDER BY b.created_at DESC`,
+        [requestRows[0].customer_id]
+      );
+
+      if (unpaidBookings.length > 0) {
+        const totalUnpaid = unpaidBookings.reduce((sum, booking) => sum + parseFloat(booking.balance), 0);
+        const topUnpaid = unpaidBookings[0];
+        return res.status(403).json({
+          message: `Policy Restriction: This customer has an outstanding unpaid balance of ₱${parseFloat(topUnpaid.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })} on Booking #BK-${topUnpaid.booking_id}. All existing balances must be fully paid before approving another service request.`,
+          code: 'OUTSTANDING_BALANCE_EXISTS',
+          has_unpaid_balance: true,
+          unpaid_balance: totalUnpaid
+        });
+      }
     }
 
     const [result] = await pool.query(

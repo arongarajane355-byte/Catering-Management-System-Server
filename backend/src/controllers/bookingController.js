@@ -10,6 +10,38 @@ const createBooking = async (req, res, next) => {
       return res.status(400).json({ message: 'Event details and at least one service/item are required.' });
     }
 
+    // ── OUTSTANDING BALANCE CHECK (CATERING POLICY) ──────────────────────
+    // Automatic policy: customer cannot avail services again if they have any unpaid balance
+    // New customers without any bookings or existing customers who are fully paid can book freely!
+    const [unpaidBookings] = await pool.query(
+      `SELECT b.booking_id, b.event_type, b.event_date, b.total_amount,
+              COALESCE(p_sub.total_paid, 0) AS total_paid,
+              (b.total_amount - COALESCE(p_sub.total_paid, 0)) AS balance
+       FROM bookings b
+       LEFT JOIN (
+         SELECT booking_id, SUM(amount_paid) AS total_paid
+         FROM payments
+         GROUP BY booking_id
+       ) p_sub ON b.booking_id = p_sub.booking_id
+       WHERE b.customer_id = ? AND b.status NOT IN ('cancelled')
+       HAVING balance > 0
+       ORDER BY b.created_at DESC`,
+      [customerId]
+    );
+
+    if (unpaidBookings.length > 0) {
+      const totalUnpaid = unpaidBookings.reduce((sum, b) => sum + parseFloat(b.balance), 0);
+      const topUnpaid = unpaidBookings[0];
+      return res.status(403).json({
+        message: `Policy Restriction: You have an existing booking (#BK-${topUnpaid.booking_id} - ${topUnpaid.event_type}) with an unpaid balance of ₱${parseFloat(topUnpaid.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })} (Total unpaid balance: ₱${totalUnpaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}). In accordance with our catering policy, full payment of all existing balances is required before you can avail or book services again.`,
+        code: 'OUTSTANDING_BALANCE_EXISTS',
+        has_unpaid_balance: true,
+        unpaid_balance: totalUnpaid,
+        unpaid_booking_id: topUnpaid.booking_id,
+        unpaid_bookings: unpaidBookings
+      });
+    }
+
     // ── DATE CONFLICT CHECK ──────────────────────────────────────────────
     const [conflictRows] = await pool.query(
       `SELECT booking_id FROM bookings
@@ -49,6 +81,40 @@ const createBooking = async (req, res, next) => {
     res.status(201).json({
       message: 'Booking created successfully.',
       booking: bookingDetails[0]
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Check if customer is eligible to book services (no outstanding balance)
+const checkBookingEligibility = async (req, res, next) => {
+  try {
+    const customerId = req.user.user_id;
+    const [unpaidBookings] = await pool.query(
+      `SELECT b.booking_id, b.event_type, b.event_date, b.total_amount,
+              COALESCE(p_sub.total_paid, 0) AS total_paid,
+              (b.total_amount - COALESCE(p_sub.total_paid, 0)) AS balance
+       FROM bookings b
+       LEFT JOIN (
+         SELECT booking_id, SUM(amount_paid) AS total_paid
+         FROM payments
+         GROUP BY booking_id
+       ) p_sub ON b.booking_id = p_sub.booking_id
+       WHERE b.customer_id = ? AND b.status NOT IN ('cancelled')
+       HAVING balance > 0
+       ORDER BY b.created_at DESC`,
+      [customerId]
+    );
+
+    const totalUnpaid = unpaidBookings.reduce((sum, b) => sum + parseFloat(b.balance), 0);
+    const eligible = unpaidBookings.length === 0;
+
+    res.json({
+      eligible,
+      has_unpaid_balance: !eligible,
+      total_unpaid_balance: totalUnpaid,
+      unpaid_bookings: unpaidBookings
     });
   } catch (error) {
     next(error);
@@ -103,16 +169,23 @@ const getBookingById = async (req, res, next) => {
   }
 };
 
-// List bookings (role dependent)
+// List bookings (role dependent, with payments & balance computed)
 const listBookings = async (req, res, next) => {
   try {
     const { role, user_id } = req.user;
     let query = `
       SELECT b.*, u.firstname AS customer_firstname, u.lastname AS customer_lastname, u.contact_number,
-             s.firstname AS staff_firstname, s.lastname AS staff_lastname
+             s.firstname AS staff_firstname, s.lastname AS staff_lastname,
+             COALESCE(p_sub.total_paid, 0) AS total_paid,
+             GREATEST(0, (b.total_amount - COALESCE(p_sub.total_paid, 0))) AS balance
       FROM bookings b
       JOIN users u ON b.customer_id = u.user_id
       LEFT JOIN users s ON b.handled_by = s.user_id
+      LEFT JOIN (
+        SELECT booking_id, SUM(amount_paid) AS total_paid
+        FROM payments
+        GROUP BY booking_id
+      ) p_sub ON b.booking_id = p_sub.booking_id
     `;
     let params = [];
 
@@ -177,6 +250,7 @@ const getBookedDates = async (req, res, next) => {
 
 module.exports = {
   createBooking,
+  checkBookingEligibility,
   getBookingById,
   listBookings,
   updateBookingStatus,
