@@ -14,7 +14,8 @@ const {
   getAdminTransactionsReport,
   getAdminStaffPerformance,
   getAdminStaffReportsDetail,
-  getAdminAuditLogs
+  getAdminAuditLogs,
+  getAdminReportsAnalytics
 } = require('../controllers/adminController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { requireRole } = require('../middlewares/roleMiddleware');
@@ -33,6 +34,8 @@ router.put('/user-status', toggleUserStatus);
 
 // Reports & Monitoring Routes
 router.get('/reports/summary', getAdminReportsSummary);
+router.get('/reports/analytics', getAdminReportsAnalytics);
+router.get('/reports/graph', getAdminReportsAnalytics);
 router.get('/reports/bookings', getAdminBookingsReport);
 router.get('/reports/transactions', getAdminTransactionsReport);
 router.get('/reports/staff-performance', getAdminStaffPerformance);
@@ -40,7 +43,5 @@ router.get('/reports/staff-details', getAdminStaffReportsDetail);
 router.get('/reports/staff-detail', getAdminStaffReportsDetail);
 router.get('/reports/audit-logs', getAdminAuditLogs);
 router.get('/audit-logs', getAdminAuditLogs);
-
-module.exports = router;
 
 module.exports = router;
