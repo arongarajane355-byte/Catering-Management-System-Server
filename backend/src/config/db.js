@@ -18,6 +18,7 @@ const pool = mysql.createPool({
 
 // Helper to initialize database tables, procedures and seed data automatically
 async function initDb() {
+  let conn;
   try {
     // First connect without specifying database to ensure DB exists
     try {
@@ -35,7 +36,7 @@ async function initDb() {
       // Ignore if user lacks CREATE DATABASE privilege or DB already exists
     }
 
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
     console.log('Connected to MySQL database:', process.env.DB_NAME || 'cms');
 
     // Create tables one by one
@@ -163,33 +164,6 @@ async function initDb() {
       // Ignore — constraint already exists
     }
 
-    // Stored procedures — registered via a separate dedicated connection (multipleStatements: false)
-    // so that semicolons inside BEGIN...END blocks are not misinterpreted as statement delimiters.
-    const procConn = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '3306'),
-      user: process.env.DB_USER || 'cms_db',
-      password: process.env.DB_PASS !== undefined ? process.env.DB_PASS : 'cms_db',
-      database: process.env.DB_NAME || 'cms',
-      multipleStatements: false
-    });
-
-    const procNames = [
-      'sp_get_services_by_category',
-      'sp_create_customer_account',
-      'sp_verify_customer_account',
-      'sp_create_booking',
-      'sp_add_booking_item',
-      'sp_update_booking_status',
-      'sp_record_payment',
-      'sp_admin_dashboard_summary'
-    ];
-    for (const name of procNames) {
-      await procConn.query(`DROP PROCEDURE IF EXISTS ${name}`);
-    }
-
-    // Each CREATE PROCEDURE is a self-contained statement, sent individually.
-    // Internal `;` terminators are valid SQL inside BEGIN...END when sent as a single statement.
     const procDefs = [
       `CREATE PROCEDURE sp_get_services_by_category()
 BEGIN
@@ -286,10 +260,46 @@ SELECT (SELECT COUNT(*) FROM users WHERE role = 'customer' AND account_status = 
 END`
     ];
 
-    for (const def of procDefs) {
-      await procConn.query(def);
+    let procConn;
+    try {
+      const [existingProcs] = await conn.query(
+        "SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ? AND ROUTINE_TYPE = 'PROCEDURE'",
+        [process.env.DB_NAME || 'cms']
+      );
+      const existingProcNames = (existingProcs || []).map(r => r.ROUTINE_NAME);
+      const procNames = [
+        'sp_get_services_by_category',
+        'sp_create_customer_account',
+        'sp_verify_customer_account',
+        'sp_create_booking',
+        'sp_add_booking_item',
+        'sp_update_booking_status',
+        'sp_record_payment',
+        'sp_admin_dashboard_summary'
+      ];
+      const allCoreProcsExist = procNames.every(name => existingProcNames.includes(name));
+
+      if (!allCoreProcsExist || process.env.FORCE_DB_SYNC === 'true') {
+        procConn = await mysql.createConnection({
+          host: process.env.DB_HOST || 'localhost',
+          port: parseInt(process.env.DB_PORT || '3306'),
+          user: process.env.DB_USER || 'cms_db',
+          password: process.env.DB_PASS !== undefined ? process.env.DB_PASS : 'cms_db',
+          database: process.env.DB_NAME || 'cms',
+          multipleStatements: false
+        });
+
+        for (const name of procNames) {
+          await procConn.query(`DROP PROCEDURE IF EXISTS ${name}`);
+        }
+
+        for (const def of procDefs) {
+          await procConn.query(def);
+        }
+      }
+    } finally {
+      if (procConn) await procConn.end().catch(() => {});
     }
-    await procConn.end();
 
     // Seed default categories if empty
     const [catCount] = await conn.query('SELECT COUNT(*) as cnt FROM service_categories');
@@ -369,10 +379,11 @@ END`
       `);
     }
 
-    conn.release();
     console.log('Database initialization completed successfully.');
   } catch (error) {
     console.error('Error during database initialization:', error);
+  } finally {
+    if (conn) conn.release();
   }
 }
 

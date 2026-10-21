@@ -3,8 +3,9 @@ const { pool } = require('./db');
 require('dotenv').config();
 
 async function initWorkflowDb() {
+  let conn;
   try {
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
 
     // 1. Create Stage 1 Tables: booking_requests & booking_request_items
     await conn.query(`
@@ -122,18 +123,11 @@ async function initWorkflowDb() {
       )
     `);
 
-    conn.release();
-
-    // Register stored procedures safely using a dedicated connection with multipleStatements: false
-    const procConn = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '3306'),
-      user: process.env.DB_USER || 'cms_db',
-      password: process.env.DB_PASS !== undefined ? process.env.DB_PASS : 'cms_db',
-      database: process.env.DB_NAME || 'cms',
-      multipleStatements: false
-    });
-
+    const [existingWorkflowProcs] = await conn.query(
+      "SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ? AND ROUTINE_TYPE = 'PROCEDURE'",
+      [process.env.DB_NAME || 'cms']
+    );
+    const existingWorkflowProcNames = (existingWorkflowProcs || []).map(r => r.ROUTINE_NAME);
     const workflowProcNames = [
       'sp_create_booking_request',
       'sp_approve_booking_request',
@@ -142,10 +136,7 @@ async function initWorkflowDb() {
       'sp_log_event_milestone',
       'sp_complete_event_evaluation'
     ];
-
-    for (const name of workflowProcNames) {
-      await procConn.query(`DROP PROCEDURE IF EXISTS ${name}`);
-    }
+    const allWorkflowProcsExist = workflowProcNames.every(name => existingWorkflowProcNames.includes(name));
 
     const workflowProcDefs = [
       // 1. Create Booking Request
@@ -355,14 +346,32 @@ async function initWorkflowDb() {
       END`
     ];
 
-    for (const def of workflowProcDefs) {
-      await procConn.query(def);
-    }
+    if (!allWorkflowProcsExist || process.env.FORCE_DB_SYNC === 'true') {
+      const procConn = await mysql.createConnection({
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '3306'),
+        user: process.env.DB_USER || 'cms_db',
+        password: process.env.DB_PASS !== undefined ? process.env.DB_PASS : 'cms_db',
+        database: process.env.DB_NAME || 'cms',
+        multipleStatements: false
+      });
 
-    await procConn.end();
-    console.log('Additive workflow tables & stored procedures initialized successfully.');
+      try {
+        for (const name of workflowProcNames) {
+          await procConn.query(`DROP PROCEDURE IF EXISTS ${name}`);
+        }
+        for (const def of workflowProcDefs) {
+          await procConn.query(def);
+        }
+      } finally {
+        await procConn.end().catch(() => {});
+      }
+    }
+    console.log('Additive workflow tables & stored procedures verified successfully.');
   } catch (error) {
     console.error('Error during workflow database initialization:', error);
+  } finally {
+    if (conn) conn.release();
   }
 }
 
