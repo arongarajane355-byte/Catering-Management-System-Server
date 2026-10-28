@@ -81,10 +81,13 @@ const createBooking = async (req, res, next) => {
       const serviceMap = {};
       allServices.forEach(s => { serviceMap[s.service_id] = s; });
 
+      const isWedding = items.some(i => serviceMap[i.service_id]?.service_name?.includes('Wedding'));
+
       const extraPersonService = allServices.find(s =>
-        s.service_name.toLowerCase().includes('additional food') ||
-        (s.unit === 'per head' && s.service_name.toLowerCase().includes('person'))
-      );
+        isWedding
+          ? s.service_name.toLowerCase().includes('wedding (per head)')
+          : (s.service_name.toLowerCase().includes('additional food / person (per head)') || (s.unit === 'per head' && s.service_name.toLowerCase().includes('additional')))
+      ) || allServices.find(s => s.unit === 'per head');
 
       const hasExtraPersonItem = extraPersonService && items.some(i => parseInt(i.service_id) === extraPersonService.service_id);
 
