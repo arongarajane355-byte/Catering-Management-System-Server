@@ -75,6 +75,45 @@ const createBooking = async (req, res, next) => {
       }
     }
 
+    // Automatic Addition: Check if extra persons beyond package capacity need to be billed
+    try {
+      const [allServices] = await pool.query('SELECT service_id, service_name, description, base_price, unit FROM services');
+      const serviceMap = {};
+      allServices.forEach(s => { serviceMap[s.service_id] = s; });
+
+      const extraPersonService = allServices.find(s =>
+        s.service_name.toLowerCase().includes('additional food') ||
+        (s.unit === 'per head' && s.service_name.toLowerCase().includes('person'))
+      );
+
+      const hasExtraPersonItem = extraPersonService && items.some(i => parseInt(i.service_id) === extraPersonService.service_id);
+
+      if (!hasExtraPersonItem && extraPersonService) {
+        let maxBaseCapacity = 0;
+        for (const item of items) {
+          const s = serviceMap[item.service_id];
+          if (s && s.unit === 'package' && (s.service_name.includes('Package') || s.service_name.includes('Catering'))) {
+            const match = (s.description || '').match(/Person:\s*(\d+)/i);
+            if (match) {
+              maxBaseCapacity = Math.max(maxBaseCapacity, parseInt(match[1], 10));
+            }
+          }
+        }
+
+        if (maxBaseCapacity > 0 && parseInt(guest_count) > maxBaseCapacity) {
+          const extraGuests = parseInt(guest_count) - maxBaseCapacity;
+          if (extraGuests > 0) {
+            await pool.query(
+              'CALL sp_add_booking_item(?, ?, ?)',
+              [newBookingId, extraPersonService.service_id, extraGuests]
+            );
+          }
+        }
+      }
+    } catch (extraErr) {
+      console.warn('Auto extra guest addition check skipped:', extraErr);
+    }
+
     // Fetch created booking header with calculated total
     const [bookingDetails] = await pool.query('SELECT * FROM bookings WHERE booking_id = ?', [newBookingId]);
 
