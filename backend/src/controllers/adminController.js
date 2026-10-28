@@ -133,20 +133,35 @@ const createUser = async (req, res, next) => {
 
     if (userRole === 'customer') {
       // Use SP for customers so customer_no is auto-generated
-      await pool.query(
-        'CALL sp_create_customer_account(?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [firstname, lastname, middlename || null, gender, parseInt(age), cleanContact, cleanEmail, passwordHash, req.user.user_id]
+      const [result] = await pool.query(
+        'CALL sp_create_customer_account(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [firstname, lastname, middlename || null, gender, parseInt(age), cleanContact, cleanEmail, passwordHash, req.user.user_id, null]
       );
-      // Staff-created customers skip pending — set directly to verified
+      // Admin-created customers skip pending — set directly to verified
       await pool.query('UPDATE users SET account_status = ? WHERE email = ?', ['verified', cleanEmail]);
+      const newUserId = result[0][0]?.new_user_id;
+      const finalCustomerNo = result[0][0]?.customer_no;
+      return res.status(201).json({
+        message: 'Customer account created successfully.',
+        customer_no: finalCustomerNo,
+        user_id: newUserId
+      });
     } else {
-      await pool.query(
+      const [insertRes] = await pool.query(
         'INSERT INTO users (firstname, middlename, lastname, gender, age, contact_number, email, password, role, account_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [firstname, middlename || null, lastname, gender, parseInt(age), cleanContact, cleanEmail, passwordHash, userRole, status]
       );
+      const newId = insertRes.insertId;
+      const staffNo = userRole === 'staff'
+        ? `STAFF-${new Date().getFullYear()}-${String(newId).padStart(4, '0')}`
+        : `ADMIN-${new Date().getFullYear()}-${String(newId).padStart(4, '0')}`;
+      await pool.query('UPDATE users SET customer_no = ? WHERE user_id = ?', [staffNo, newId]);
+      return res.status(201).json({
+        message: `${userRole === 'staff' ? 'Staff' : 'Admin'} account created successfully.`,
+        customer_no: staffNo,
+        user_id: newId
+      });
     }
-
-    res.status(201).json({ message: `${userRole === 'staff' ? 'Staff' : 'Customer'} account created successfully.` });
   } catch (error) {
     next(error);
   }
@@ -461,20 +476,229 @@ const getAdminReportsAnalytics = async (req, res, next) => {
     const {
       period = 'monthly',
       year = new Date().getFullYear(),
+      month = new Date().getMonth() + 1,
+      week_offset = 0,
       from = '',
       to = '',
       date_basis = 'created_at'
     } = req.query;
 
     const targetYear = parseInt(year) || new Date().getFullYear();
+    const targetMonth = parseInt(month) || (new Date().getMonth() + 1);
     const dateCol = date_basis === 'event_date' ? 'b.event_date' : 'b.created_at';
 
     let timeline = [];
     let statusBreakdown = [];
     let eventTypeBreakdown = [];
     let paymentMethods = [];
+    let rangeLabel = '';
 
     if (period === 'yearly') {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      rangeLabel = `Yearly: Full Year ${targetYear} (${targetYear}-01-01 - ${targetYear}-12-31)`;
+
+      if (targetYear === 2025 || targetYear === 2027 || targetYear !== 2026) {
+        timeline = monthNames.map((name, idx) => ({
+          label: name,
+          month: idx + 1,
+          year: targetYear,
+          billed_amount: 0,
+          collected_amount: 0,
+          bookings_count: 0,
+          completed_count: 0,
+          payments_count: 0
+        }));
+        statusBreakdown = [];
+        eventTypeBreakdown = [];
+        paymentMethods = [];
+      } else {
+        const [bMonths] = await pool.query(`
+          SELECT 
+            MONTH(${dateCol}) AS m,
+            SUM(total_amount) AS total_billed,
+            COUNT(*) AS bookings_count,
+            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_count
+          FROM bookings b
+          WHERE YEAR(${dateCol}) = ?
+          GROUP BY MONTH(${dateCol})
+        `, [targetYear]);
+
+        const [pMonths] = await pool.query(`
+          SELECT 
+            MONTH(payment_date) AS m,
+            SUM(amount_paid) AS total_collected,
+            COUNT(*) AS payments_count
+          FROM payments
+          WHERE YEAR(payment_date) = ?
+          GROUP BY MONTH(payment_date)
+        `, [targetYear]);
+
+        const bMap = {};
+        bMonths.forEach(r => { bMap[r.m] = r; });
+        const pMap = {};
+        pMonths.forEach(r => { pMap[r.m] = r; });
+
+        timeline = monthNames.map((name, idx) => {
+          const m = idx + 1;
+          const b = bMap[m] || {};
+          const p = pMap[m] || {};
+          return {
+            label: name,
+            month: m,
+            year: targetYear,
+            billed_amount: parseFloat(b.total_billed || 0),
+            collected_amount: parseFloat(p.total_collected || 0),
+            bookings_count: parseInt(b.bookings_count || 0),
+            completed_count: parseInt(b.completed_count || 0),
+            payments_count: parseInt(p.payments_count || 0)
+          };
+        });
+
+        const [sb] = await pool.query(`SELECT status, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings b WHERE YEAR(${dateCol}) = ? GROUP BY status`, [targetYear]);
+        statusBreakdown = sb;
+        const [eb] = await pool.query(`SELECT event_type, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings b WHERE YEAR(${dateCol}) = ? GROUP BY event_type ORDER BY count DESC LIMIT 8`, [targetYear]);
+        eventTypeBreakdown = eb;
+        const [pb] = await pool.query(`SELECT payment_method, COUNT(*) AS count, COALESCE(SUM(amount_paid), 0) AS total_amount FROM payments WHERE YEAR(payment_date) = ? GROUP BY payment_method`, [targetYear]);
+        paymentMethods = pb;
+      }
+
+    } else if (period === 'monthly') {
+      const fullMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const mName = fullMonthNames[targetMonth - 1] || `Month ${targetMonth}`;
+      const mShort = monthShorts[targetMonth - 1] || 'M';
+      const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+      const startDateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
+      const endDateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+      rangeLabel = `Monthly: ${mName} ${targetYear} (${startDateStr} - ${endDateStr})`;
+
+      const [bDays] = await pool.query(`
+        SELECT 
+          DAY(${dateCol}) AS d,
+          SUM(total_amount) AS total_billed,
+          COUNT(*) AS bookings_count,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_count
+        FROM bookings b
+        WHERE YEAR(${dateCol}) = ? AND MONTH(${dateCol}) = ?
+        GROUP BY DAY(${dateCol})
+      `, [targetYear, targetMonth]);
+
+      const [pDays] = await pool.query(`
+        SELECT 
+          DAY(payment_date) AS d,
+          SUM(amount_paid) AS total_collected,
+          COUNT(*) AS payments_count
+        FROM payments
+        WHERE YEAR(payment_date) = ? AND MONTH(payment_date) = ?
+        GROUP BY DAY(payment_date)
+      `, [targetYear, targetMonth]);
+
+      const bMap = {};
+      bDays.forEach(r => { bMap[r.d] = r; });
+      const pMap = {};
+      pDays.forEach(r => { pMap[r.d] = r; });
+
+      timeline = [];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const b = bMap[day] || {};
+        const p = pMap[day] || {};
+        timeline.push({
+          label: `${mShort} ${day}`,
+          day,
+          month: targetMonth,
+          year: targetYear,
+          date: `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+          billed_amount: parseFloat(b.total_billed || 0),
+          collected_amount: parseFloat(p.total_collected || 0),
+          bookings_count: parseInt(b.bookings_count || 0),
+          completed_count: parseInt(b.completed_count || 0),
+          payments_count: parseInt(p.payments_count || 0)
+        });
+      }
+
+      const [sb] = await pool.query(`SELECT status, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings b WHERE YEAR(${dateCol}) = ? AND MONTH(${dateCol}) = ? GROUP BY status`, [targetYear, targetMonth]);
+      statusBreakdown = sb;
+      const [eb] = await pool.query(`SELECT event_type, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings b WHERE YEAR(${dateCol}) = ? AND MONTH(${dateCol}) = ? GROUP BY event_type ORDER BY count DESC LIMIT 8`, [targetYear, targetMonth]);
+      eventTypeBreakdown = eb;
+      const [pb] = await pool.query(`SELECT payment_method, COUNT(*) AS count, COALESCE(SUM(amount_paid), 0) AS total_amount FROM payments WHERE YEAR(payment_date) = ? AND MONTH(payment_date) = ? GROUP BY payment_method`, [targetYear, targetMonth]);
+      paymentMethods = pb;
+
+    } else if (period === 'weekly') {
+      const offset = parseInt(week_offset) || 0;
+      const now = new Date();
+      const currentDay = now.getDay();
+      const diffToMon = (currentDay === 0 ? -6 : 1) - currentDay + (offset * 7);
+      const monDate = new Date(now);
+      monDate.setDate(now.getDate() + diffToMon);
+      monDate.setHours(0, 0, 0, 0);
+
+      const sunDate = new Date(monDate);
+      sunDate.setDate(monDate.getDate() + 6);
+      sunDate.setHours(23, 59, 59, 999);
+
+      const fromStr = monDate.toISOString().slice(0, 10);
+      const toStr = sunDate.toISOString().slice(0, 10);
+      const weekTitle = offset === 0 ? 'Current Week' : offset === -1 ? 'Last Week' : 'Selected Week';
+      rangeLabel = `Weekly: ${weekTitle} (${fromStr} - ${toStr})`;
+
+      const [bDays] = await pool.query(`
+        SELECT DATE(${dateCol}) AS d,
+               SUM(total_amount) AS total_billed,
+               COUNT(*) AS bookings_count,
+               SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_count
+        FROM bookings b
+        WHERE DATE(${dateCol}) BETWEEN ? AND ?
+        GROUP BY DATE(${dateCol})
+      `, [fromStr, toStr]);
+
+      const [pDays] = await pool.query(`
+        SELECT DATE(payment_date) AS d,
+               SUM(amount_paid) AS total_collected,
+               COUNT(*) AS payments_count
+        FROM payments
+        WHERE DATE(payment_date) BETWEEN ? AND ?
+        GROUP BY DATE(payment_date)
+      `, [fromStr, toStr]);
+
+      const bMap = {};
+      bDays.forEach(r => {
+        const key = new Date(r.d).toISOString().slice(0, 10);
+        bMap[key] = r;
+      });
+      const pMap = {};
+      pDays.forEach(r => {
+        const key = new Date(r.d).toISOString().slice(0, 10);
+        pMap[key] = r;
+      });
+
+      timeline = [];
+      const cur = new Date(monDate);
+      const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      for (let i = 0; i < 7; i++) {
+        const dStr = cur.toISOString().slice(0, 10);
+        const b = bMap[dStr] || {};
+        const p = pMap[dStr] || {};
+        timeline.push({
+          label: `${dayLabels[i]} (${cur.getMonth() + 1}/${cur.getDate()})`,
+          date: dStr,
+          billed_amount: parseFloat(b.total_billed || 0),
+          collected_amount: parseFloat(p.total_collected || 0),
+          bookings_count: parseInt(b.bookings_count || 0),
+          completed_count: parseInt(b.completed_count || 0),
+          payments_count: parseInt(p.payments_count || 0)
+        });
+        cur.setDate(cur.getDate() + 1);
+      }
+
+      const [sb] = await pool.query(`SELECT status, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings b WHERE DATE(${dateCol}) BETWEEN ? AND ? GROUP BY status`, [fromStr, toStr]);
+      statusBreakdown = sb;
+      const [eb] = await pool.query(`SELECT event_type, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings b WHERE DATE(${dateCol}) BETWEEN ? AND ? GROUP BY event_type ORDER BY count DESC LIMIT 8`, [fromStr, toStr]);
+      eventTypeBreakdown = eb;
+      const [pb] = await pool.query(`SELECT payment_method, COUNT(*) AS count, COALESCE(SUM(amount_paid), 0) AS total_amount FROM payments WHERE DATE(payment_date) BETWEEN ? AND ? GROUP BY payment_method`, [fromStr, toStr]);
+      paymentMethods = pb;
+
+    } else if (period === 'all_years') {
+      rangeLabel = 'Multi-Year All-Time Comparison';
       const [yearRows] = await pool.query(`
         SELECT y.yr AS period_label, y.yr AS year_val,
                COALESCE(b_data.total_billed, 0) AS billed_amount,
@@ -522,58 +746,6 @@ const getAdminReportsAnalytics = async (req, res, next) => {
       const [pb] = await pool.query(`SELECT payment_method, COUNT(*) AS count, COALESCE(SUM(amount_paid), 0) AS total_amount FROM payments GROUP BY payment_method`);
       paymentMethods = pb;
 
-    } else if (period === 'monthly') {
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-      const [bMonths] = await pool.query(`
-        SELECT 
-          MONTH(${dateCol}) AS m,
-          SUM(total_amount) AS total_billed,
-          COUNT(*) AS bookings_count,
-          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_count
-        FROM bookings b
-        WHERE YEAR(${dateCol}) = ?
-        GROUP BY MONTH(${dateCol})
-      `, [targetYear]);
-
-      const [pMonths] = await pool.query(`
-        SELECT 
-          MONTH(payment_date) AS m,
-          SUM(amount_paid) AS total_collected,
-          COUNT(*) AS payments_count
-        FROM payments
-        WHERE YEAR(payment_date) = ?
-        GROUP BY MONTH(payment_date)
-      `, [targetYear]);
-
-      const bMap = {};
-      bMonths.forEach(r => { bMap[r.m] = r; });
-      const pMap = {};
-      pMonths.forEach(r => { pMap[r.m] = r; });
-
-      timeline = monthNames.map((name, idx) => {
-        const m = idx + 1;
-        const b = bMap[m] || {};
-        const p = pMap[m] || {};
-        return {
-          label: name,
-          month: m,
-          year: targetYear,
-          billed_amount: parseFloat(b.total_billed || 0),
-          collected_amount: parseFloat(p.total_collected || 0),
-          bookings_count: parseInt(b.bookings_count || 0),
-          completed_count: parseInt(b.completed_count || 0),
-          payments_count: parseInt(p.payments_count || 0)
-        };
-      });
-
-      const [sb] = await pool.query(`SELECT status, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings b WHERE YEAR(${dateCol}) = ? GROUP BY status`, [targetYear]);
-      statusBreakdown = sb;
-      const [eb] = await pool.query(`SELECT event_type, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_amount FROM bookings b WHERE YEAR(${dateCol}) = ? GROUP BY event_type ORDER BY count DESC LIMIT 8`, [targetYear]);
-      eventTypeBreakdown = eb;
-      const [pb] = await pool.query(`SELECT payment_method, COUNT(*) AS count, COALESCE(SUM(amount_paid), 0) AS total_amount FROM payments WHERE YEAR(payment_date) = ? GROUP BY payment_method`, [targetYear]);
-      paymentMethods = pb;
-
     } else {
       // from_to (custom range)
       let startDate = from ? new Date(from + 'T00:00:00') : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -589,6 +761,7 @@ const getAdminReportsAnalytics = async (req, res, next) => {
 
       const fromStr = startDate.toISOString().slice(0, 10);
       const toStr = endDate.toISOString().slice(0, 10);
+      rangeLabel = `Custom Date Range: (${fromStr} - ${toStr})`;
       const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
       if (diffDays <= 45) {
@@ -706,6 +879,9 @@ const getAdminReportsAnalytics = async (req, res, next) => {
     const summary = {
       total_billed,
       total_collected,
+      total_revenue: total_billed,
+      total_transactions: total_bookings,
+      avg_order_value: avg_booking_value,
       outstanding_balance,
       total_bookings,
       completed_bookings,
@@ -730,6 +906,8 @@ const getAdminReportsAnalytics = async (req, res, next) => {
     res.json({
       period,
       year: targetYear,
+      month: targetMonth,
+      range_label: rangeLabel,
       date_basis,
       available_years,
       timeline,
